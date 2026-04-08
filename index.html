@@ -1,0 +1,356 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>@synapxlab/jstree — demo</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: system-ui, sans-serif;
+      font-size: 13px;
+      background: #f0f2f5;
+      color: #333;
+    }
+    header {
+      background: #1e2d40;
+      color: #fff;
+      padding: 12px 20px;
+      font-size: 15px;
+      font-weight: 600;
+      letter-spacing: .02em;
+    }
+    header span { color: #aad4f5; }
+
+    .layout {
+      display: grid;
+      grid-template-columns: 280px 1fr;
+      gap: 16px;
+      padding: 16px;
+      height: calc(100vh - 46px);
+    }
+
+    .panel {
+      background: #fff;
+      border: 1px solid #d8dce2;
+      border-radius: 6px;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+
+    .panel-head {
+      padding: 8px 12px;
+      font-weight: 600;
+      font-size: 12px;
+      text-transform: uppercase;
+      letter-spacing: .06em;
+      color: #666;
+      border-bottom: 1px solid #eee;
+      background: #fafafa;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .panel-body { padding: 8px; flex: 1; overflow: auto; }
+
+    /* search bar */
+    .search-bar {
+      display: flex;
+      padding: 6px 8px;
+      gap: 6px;
+      border-bottom: 1px solid #eee;
+    }
+    .search-bar input {
+      flex: 1;
+      border: 1px solid #ccc;
+      border-radius: 4px;
+      padding: 4px 8px;
+      font: inherit;
+      outline: none;
+    }
+    .search-bar input:focus { border-color: #aad4f5; }
+    .search-bar button {
+      background: #1e2d40;
+      color: #fff;
+      border: none;
+      border-radius: 4px;
+      padding: 4px 10px;
+      cursor: pointer;
+      font: inherit;
+    }
+
+    /* right panel */
+    .right { display: flex; flex-direction: column; gap: 16px; overflow: auto; }
+
+    .demo-block { background: #fff; border: 1px solid #d8dce2; border-radius: 6px; overflow: hidden; }
+    .demo-block .panel-head { cursor: pointer; user-select: none; }
+    .demo-block .panel-head::after { content: '▾'; margin-left: auto; }
+    .demo-block.collapsed .panel-body { display: none; }
+    .demo-block.collapsed .panel-head::after { content: '▸'; }
+
+    .demo-block .panel-body { padding: 12px; }
+
+    .btn-row { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 10px; }
+    .btn {
+      padding: 5px 12px;
+      border-radius: 4px;
+      border: 1px solid #ccc;
+      background: #fff;
+      cursor: pointer;
+      font: inherit;
+      font-size: 12px;
+      transition: background .1s;
+    }
+    .btn:hover { background: #f0f2f5; }
+    .btn.primary { background: #1268b3; color: #fff; border-color: #1268b3; }
+    .btn.primary:hover { background: #0f5190; }
+    .btn.danger { background: #c0392b; color: #fff; border-color: #c0392b; }
+    .btn.danger:hover { background: #a93226; }
+
+    #log {
+      background: #1e2d40;
+      color: #aad4f5;
+      border-radius: 4px;
+      padding: 8px 10px;
+      font-family: monospace;
+      font-size: 11px;
+      max-height: 160px;
+      overflow: auto;
+      white-space: pre-wrap;
+    }
+    #log .ev { color: #7ecffa; }
+    #log .data { color: #e0e0e0; }
+
+    #tree1 { min-height: 300px; }
+    #tree2 { min-height: 200px; }
+  </style>
+</head>
+<body>
+
+<header>@synapxlab/<span>jstree</span> — demo &nbsp;·&nbsp; TypeScript · Zero dependency</header>
+
+<div class="layout">
+
+  <!-- LEFT : arbre principal -->
+  <div class="panel">
+    <div class="panel-head">📁 Arbre GED (wholerow + contextmenu + dnd + state)</div>
+    <div class="search-bar">
+      <input type="search" id="search-input" placeholder="Recherche...">
+      <button id="search-btn">🔍</button>
+    </div>
+    <div class="panel-body">
+      <div id="tree1"></div>
+    </div>
+  </div>
+
+  <!-- RIGHT -->
+  <div class="right">
+
+    <!-- API controls -->
+    <div class="demo-block">
+      <div class="panel-head">⚙️ Actions API</div>
+      <div class="panel-body">
+        <div class="btn-row">
+          <button class="btn" id="btn-open-all">Open all</button>
+          <button class="btn" id="btn-close-all">Close all</button>
+          <button class="btn primary" id="btn-create">+ Create node</button>
+          <button class="btn danger" id="btn-delete">Delete selected</button>
+          <button class="btn" id="btn-refresh">↺ Refresh</button>
+        </div>
+        <div class="btn-row">
+          <button class="btn" id="btn-get-selected">Get selected</button>
+          <button class="btn" id="btn-get-path">Get path</button>
+          <button class="btn" id="btn-rename">Rename selected</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Checkbox tree -->
+    <div class="demo-block">
+      <div class="panel-head">☑️ Arbre checkbox (three-state + cascade)</div>
+      <div class="panel-body">
+        <div id="tree2"></div>
+        <div class="btn-row" style="margin-top:10px">
+          <button class="btn" id="btn-get-checked">Get checked</button>
+          <button class="btn danger" id="btn-uncheck-all">Uncheck all</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Event log -->
+    <div class="demo-block">
+      <div class="panel-head">📋 Event log</div>
+      <div class="panel-body" style="padding:0">
+        <div id="log"><span style="color:#666">— en attente d'événements —</span></div>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<script type="module">
+import { JsTree } from '/src/index.ts';
+
+// ─── Log helper ──────────────────────────────────────────────────────────────
+const log = document.getElementById('log');
+function addLog(event, data) {
+  const line = document.createElement('div');
+  line.innerHTML = `<span class="ev">${event}</span> <span class="data">${JSON.stringify(data ?? {})}</span>`;
+  log.insertBefore(line, log.firstChild);
+  if (log.children.length > 40) log.lastChild?.remove();
+}
+
+// ─── Tree 1 — GED ─────────────────────────────────────────────────────────────
+const tree1 = new JsTree('#tree1', {
+  plugins: ['wholerow', 'contextmenu', 'dnd', 'search', 'state', 'types'],
+  core: {
+    multiple: true,
+    check_callback: true,
+    data: [
+      { id: '1',  text: 'Racine',         parent: '#', icon: 'jstree-folder', state: { opened: true } },
+      { id: '2',  text: 'Documents',      parent: '1', icon: 'jstree-folder', state: { opened: true } },
+      { id: '3',  text: 'Images',         parent: '1', icon: 'jstree-folder' },
+      { id: '4',  text: 'Rapport 2024',   parent: '2', icon: 'jstree-file' },
+      { id: '5',  text: 'Devis Q1',       parent: '2', icon: 'jstree-file' },
+      { id: '6',  text: 'Factures',       parent: '2', icon: 'jstree-folder', state: { opened: true } },
+      { id: '7',  text: 'Facture-001',    parent: '6', icon: 'jstree-file' },
+      { id: '8',  text: 'Facture-002',    parent: '6', icon: 'jstree-file' },
+      { id: '9',  text: 'Photo.png',      parent: '3', icon: 'jstree-file' },
+      { id: '10', text: 'Logo.svg',       parent: '3', icon: 'jstree-file' },
+      { id: '11', text: 'Archives',       parent: '1', icon: 'jstree-folder' },
+      { id: '12', text: 'Archive 2023',   parent: '11', icon: 'jstree-file' },
+    ],
+  },
+  types: {
+    default: { icon: 'jstree-file' },
+    folder:  { icon: 'jstree-folder' },
+  },
+  contextmenu: {
+    items: (node) => ({
+      rename: {
+        label: 'Renommer',
+        icon: '✏️',
+        action: () => tree1.edit(node.id),
+      },
+      create: {
+        label: 'Nouveau dossier',
+        icon: '📁',
+        separator_before: true,
+        action: () => {
+          const id = tree1.create_node(node.id, { text: 'Nouveau dossier', icon: 'jstree-folder' });
+          if (id) tree1.edit(id);
+        },
+      },
+      remove: {
+        label: 'Supprimer',
+        icon: '🗑️',
+        separator_before: true,
+        _disabled: node.id === '1',
+        action: () => tree1.delete_node(node.id),
+      },
+    }),
+  },
+  state: { key: 'demo_tree1' },
+});
+
+// Log events
+for (const ev of ['select_node','deselect_node','create_node','rename_node','delete_node','move_node','open_node','close_node']) {
+  tree1.element.addEventListener(`${ev}.jstree`, (e) => {
+    const d = e.detail;
+    addLog(ev, { id: d?.node?.id, text: d?.node?.text });
+  });
+}
+
+// ─── Tree 2 — Checkbox ────────────────────────────────────────────────────────
+const tree2 = new JsTree('#tree2', {
+  plugins: ['checkbox', 'wholerow'],
+  core: {
+    multiple: true,
+    check_callback: true,
+    data: [
+      { id: 'a',  text: 'Permissions',  parent: '#', icon: false, state: { opened: true } },
+      { id: 'a1', text: 'Lecture',      parent: 'a', icon: false },
+      { id: 'a2', text: 'Écriture',     parent: 'a', icon: false },
+      { id: 'a3', text: 'Suppression',  parent: 'a', icon: false },
+      { id: 'b',  text: 'Modules',      parent: '#', icon: false, state: { opened: true } },
+      { id: 'b1', text: 'GED',          parent: 'b', icon: false, state: { selected: true, checked: true } },
+      { id: 'b2', text: 'Facturation',  parent: 'b', icon: false },
+      { id: 'b3', text: 'Planning',     parent: 'b', icon: false, state: { selected: true, checked: true } },
+    ],
+  },
+  checkbox: {
+    three_state:  true,
+    tie_selection: true,
+    cascade: 'up+down',
+  },
+});
+
+// ─── Controls ─────────────────────────────────────────────────────────────────
+document.getElementById('btn-open-all').onclick  = () => tree1.open_all();
+document.getElementById('btn-close-all').onclick = () => tree1.close_all();
+document.getElementById('btn-refresh').onclick   = () => tree1.refresh();
+
+document.getElementById('btn-create').onclick = () => {
+  const sel = tree1.get_selected();
+  const parent = sel.length ? sel[0] : '1';
+  const id = tree1.create_node(parent, { text: 'Nouveau nœud', icon: 'jstree-file' });
+  if (id) tree1.edit(id);
+};
+
+document.getElementById('btn-delete').onclick = () => {
+  for (const id of tree1.get_selected()) {
+    if (id !== '1') tree1.delete_node(id);
+  }
+};
+
+document.getElementById('btn-get-selected').onclick = () => {
+  const sel = tree1.get_selected();
+  addLog('get_selected()', { ids: sel });
+};
+
+document.getElementById('btn-get-path').onclick = () => {
+  const sel = tree1.get_selected();
+  if (sel.length) {
+    const path = tree1.get_path(sel[0], ' / ');
+    addLog('get_path()', { path });
+  } else {
+    addLog('get_path()', { error: 'aucun nœud sélectionné' });
+  }
+};
+
+document.getElementById('btn-rename').onclick = () => {
+  const sel = tree1.get_selected();
+  if (sel.length) tree1.edit(sel[0]);
+};
+
+document.getElementById('btn-get-checked').onclick = () => {
+  const plugin = tree2.getPlugin('checkbox');
+  const checked = plugin?.get_checked?.() ?? [];
+  addLog('get_checked()', { ids: checked });
+};
+
+document.getElementById('btn-uncheck-all').onclick = () => {
+  const plugin = tree2.getPlugin('checkbox');
+  plugin?.uncheck_all?.();
+  addLog('uncheck_all()', {});
+};
+
+// ─── Search ───────────────────────────────────────────────────────────────────
+const searchInput = document.getElementById('search-input');
+document.getElementById('search-btn').onclick = () => tree1.search(searchInput.value);
+searchInput.addEventListener('keydown', (e) => {
+  if (e.key === 'Enter') tree1.search(searchInput.value);
+  if (e.key === 'Escape') { searchInput.value = ''; tree1.search(''); }
+});
+
+// ─── Collapsible blocks ───────────────────────────────────────────────────────
+for (const h of document.querySelectorAll('.demo-block .panel-head')) {
+  h.addEventListener('click', () => h.closest('.demo-block').classList.toggle('collapsed'));
+}
+</script>
+
+</body>
+</html>
