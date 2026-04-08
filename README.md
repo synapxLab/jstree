@@ -33,17 +33,34 @@ Inspired by the battle-tested jsTree ecosystem — redesigned with modern ES2020
 
 ### PHP helper
 
-`php/AdlissTree.php` — server-side helper to generate jstree-compatible JSON:
+`php/AdlissTree.php` — server-side helper to generate jstree-compatible JSON.
+
+Built around `App\Shared\Folder` (`app/Shared/Folder.php`), the Adliss internal class
+that manages folder trees using the **Nested Set Model** (`nfm_bg` / `nfm_bd` columns).
+`Folder::get_folders()` already returns the flat format expected by jstree — `fromAdlissFolder()` wraps it directly.
 
 ```php
-// From a PDO table
-$tree = (new AdlissTree($pdo))
-    ->fromTable('folder', 'id', 'name', 'parent_id')
-    ->toJson();
+// Most common case — from App\Shared\Folder (Nested Set, any Adliss folder model)
+AdlissTree::fromAdlissFolder(\App\Model\Ged\Folder::class, $entity_id)
+    ->sendJson();
 
-// From Adliss App::getDb()->prepare() results
-$tree = AdlissTree::fromAdlissQuery($rows, 'id', 'name', 'parent_id')
-    ->sendJson(); // sends JSON response + exit
+// With icon and opened-state customisation
+AdlissTree::fromAdlissFolder(
+    \App\Model\Ged\Folder::class,
+    $entity_id,
+    null,
+    fn($node, $row) => array_merge($node, [
+        'icon'  => $row['parent'] === '#' ? 'jstree-folder' : 'jstree-file',
+        'state' => ['opened' => $row['parent'] === '#'],
+    ])
+)->sendJson();
+
+// From any App::getDb()->prepare() result
+AdlissTree::fromAdlissQuery($rows, 'id', 'text', 'parent')
+    ->sendJson();
+
+// From a raw PDO query (outside Adliss)
+(new AdlissTree($pdo))->fromTable('folder', 'id', 'name', 'parent_id')->toJson();
 ```
 
 ### Install
@@ -146,17 +163,35 @@ Inspiré de l'écosystème jsTree — redessiné avec ES2020 moderne, build Vite
 
 ### Helper PHP
 
-`php/AdlissTree.php` — génère du JSON compatible jstree côté serveur :
+`php/AdlissTree.php` — génère du JSON compatible jstree côté serveur.
+
+Conçu autour de `App\Shared\Folder` (`app/Shared/Folder.php`), la classe interne
+Adliss qui gère les arborescences de dossiers via le **modèle Nested Set**
+(colonnes `nfm_bg` / `nfm_bd`). `Folder::get_folders()` retourne déjà le format
+plat attendu par jstree — `fromAdlissFolder()` l'enveloppe directement.
 
 ```php
-// Depuis une table PDO
-$tree = (new AdlissTree($pdo))
-    ->fromTable('folder', 'id', 'name', 'parent_id')
-    ->toJson();
+// Cas principal — depuis App\Shared\Folder (n'importe quel modèle dossier Adliss)
+AdlissTree::fromAdlissFolder(\App\Model\Ged\Folder::class, $entity_id)
+    ->sendJson();
 
-// Depuis App::getDb()->prepare() d'Adliss
-$tree = AdlissTree::fromAdlissQuery($rows, 'id', 'name', 'parent_id')
-    ->sendJson(); // envoie la réponse JSON + exit
+// Avec personnalisation icône et état ouvert
+AdlissTree::fromAdlissFolder(
+    \App\Model\Ged\Folder::class,
+    $entity_id,
+    null,
+    fn($node, $row) => array_merge($node, [
+        'icon'  => $row['parent'] === '#' ? 'jstree-folder' : 'jstree-file',
+        'state' => ['opened' => $row['parent'] === '#'],
+    ])
+)->sendJson();
+
+// Depuis n'importe quel résultat App::getDb()->prepare()
+AdlissTree::fromAdlissQuery($rows, 'id', 'text', 'parent')
+    ->sendJson();
+
+// Depuis une requête PDO directe (hors Adliss)
+(new AdlissTree($pdo))->fromTable('folder', 'id', 'name', 'parent_id')->toJson();
 ```
 
 ### Installation
@@ -195,13 +230,33 @@ npm run dev         # serveur Vite dev (démo index.html)
 
 ## Acknowledgements / Remerciements
 
-Cette bibliothèque a été conçue en s'appuyant sur les sources des projets suivants,  
-conservés dans `mit/` à titre de référence. Aucun code n'est copié — ils ont guidé  
-les décisions d'API, de comportement des plugins et du helper PHP.
+Cette bibliothèque a été conçue en s'appuyant sur les sources des projets suivants.  
+Aucun code n'est copié — ils ont guidé les décisions d'API, de comportement des plugins et du helper PHP.
 
-> This library was designed with reference to the following open-source projects,  
-> kept in `mit/` for study. No code was copied — they informed API decisions,  
-> plugin behaviour, and the PHP helper design.
+> This library was designed with reference to the following projects.  
+> No code was copied — they informed API decisions, plugin behaviour, and the PHP helper design.
+
+---
+
+### [App\Shared\Folder](https://adliss.fr) — `app/Shared/Folder.php` *(Adliss internal)*
+
+> Classe interne ERP Adliss — gestion des arborescences de dossiers  
+> Modèle : **Nested Set** (colonnes `nfm_bg` / `nfm_bd`)  
+> © synapxLab — code propriétaire, non distribué
+
+La source de production réelle. C'est cette classe qui alimente jstree dans les modules
+GED, WMS, Shop et Webmail d'Adliss. Sa méthode `get_folders($entity_id, $folder_id)`
+retourne exactement le format plat `{id, text, parent}` attendu par jstree — ce qui a
+directement déterminé le contrat de `AdlissTree::fromAdlissFolder()`.
+
+Les opérations NFM (`create`, `move`, `delete`, `verifNfm`) ont également inspiré
+la compréhension de ce que le client JS doit renvoyer au serveur lors d'un `move_node`.
+
+The real production source. This class powers jstree in Adliss GED, WMS, Shop, and Webmail modules.
+Its `get_folders($entity_id, $folder_id)` method already returns the exact flat `{id, text, parent}`
+format jstree expects — which directly determined the `AdlissTree::fromAdlissFolder()` contract.
+The NFM operations (`create`, `move`, `delete`, `verifNfm`) also informed the understanding
+of what the JS client must send back on `move_node`.
 
 ---
 

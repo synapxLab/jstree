@@ -5,12 +5,24 @@
  * Format attendu par le client JS (flat array) :
  *   [{ id, text, parent, icon?, state?, type?, data? }, ...]
  *
- * Usage :
- *   $tree = new AdlissTree($pdo);
- *   echo $tree->fromTable('folder', 'id', 'name', 'parent_id')->toJson();
+ * ---
+ * Ce helper est conçu pour s'intégrer avec App\Shared\Folder (app/Shared/Folder.php),
+ * la classe Adliss qui gère les arborescences de dossiers via le modèle Nested Set
+ * (colonnes nfm_bg / nfm_bd). La méthode Folder::get_folders() retourne déjà
+ * le format plat attendu par jstree — fromAdlissFolder() l'enveloppe directement.
  *
- *   // Ou avec un tableau PHP déjà construit :
- *   $tree = AdlissTree::fromArray($rows)->toJson();
+ * Cas d'usage principaux :
+ *
+ *   // 1. Depuis App\Shared\Folder (Nested Set Adliss) — cas le plus courant
+ *   AdlissTree::fromAdlissFolder(\App\Model\Ged\Folder::class, $entity_id)
+ *       ->sendJson();
+ *
+ *   // 2. Depuis un résultat App::getDb()->prepare() quelconque
+ *   AdlissTree::fromAdlissQuery($rows, 'id', 'text', 'parent')
+ *       ->sendJson();
+ *
+ *   // 3. Depuis une requête PDO directe (hors Adliss)
+ *   (new AdlissTree($pdo))->fromTable('folder', 'id', 'name', 'parent_id')->toJson();
  */
 
 namespace Synapxlab\JsTree;
@@ -185,34 +197,79 @@ class AdlissTree
         exit;
     }
 
-    // ─── Intégration Adliss (App::getDb()) ───────────────────────────────────
+    // ─── Intégration Adliss ───────────────────────────────────────────────────
 
     /**
-     * Génère les nœuds depuis une requête PDO Adliss (App::getDb()->prepare()).
+     * Intégration directe avec App\Shared\Folder (Nested Set Model Adliss).
      *
-     * @param array<array<string,mixed>> $rows    Résultat de prepare()
-     * @param string   $idCol      Colonne id
-     * @param string   $textCol    Colonne libellé
-     * @param string   $parentCol  Colonne parent_id
-     * @param callable|null $transform  Callback(array $row): array — pour personnaliser chaque nœud
+     * App\Shared\Folder utilise les colonnes nfm_bg (borne gauche) et nfm_bd (borne droite)
+     * pour représenter l'arborescence sans récursion SQL. La méthode get_folders() retourne
+     * déjà le format plat jstree (id, text, parent) trié par position NFM.
+     *
+     * Exemple — contrôleur GED :
+     *   $json = AdlissTree::fromAdlissFolder(\App\Model\Ged\Folder::class, $entity_id)
+     *               ->sendJson();
+     *
+     * Avec icône et état ouvert sur le nœud racine :
+     *   $json = AdlissTree::fromAdlissFolder(
+     *       \App\Model\Ged\Folder::class,
+     *       $entity_id,
+     *       null,           // $folder_id = null → charge depuis la racine
+     *       fn($node, $row) => array_merge($node, [
+     *           'icon'  => $row['parent'] === '#' ? 'jstree-folder' : 'jstree-file',
+     *           'state' => ['opened' => $row['parent'] === '#'],
+     *       ])
+     *   )->sendJson();
+     *
+     * @param class-string $folderClass  Classe héritant de App\Shared\Folder
+     * @param int          $entityId     Tenant Adliss
+     * @param int|null     $folderId     Nœud racine du sous-arbre (null = racine globale)
+     * @param callable|null $transform   Callback(?array $node, object $row): array — enrichissement
+     */
+    public static function fromAdlissFolder(
+        string    $folderClass,
+        int       $entityId,
+        ?int      $folderId  = null,
+        ?callable $transform = null,
+    ): static {
+        /** @var array<object> $rows */
+        $rows = $folderClass::get_folders($entityId, $folderId);
+        return static::fromAdlissQuery($rows, 'id', 'text', 'parent', $transform);
+    }
+
+    /**
+     * Génère les nœuds depuis un résultat App::getDb()->prepare().
+     *
+     * Compatible avec les stdClass retournés par le PDO wrapper Adliss.
+     * Les colonnes id, text, parent sont mappées directement — toutes les
+     * autres colonnes sont passées dans 'data' pour usage côté JS.
+     *
+     * @param array<array<string,mixed>|object> $rows  Résultat de prepare()
+     * @param string    $idCol      Colonne id (défaut : 'id')
+     * @param string    $textCol    Colonne libellé (défaut : 'text')
+     * @param string    $parentCol  Colonne parent_id — '#' si NULL (défaut : 'parent')
+     * @param callable|null $transform  Callback(array $node, array $row): array
      */
     public static function fromAdlissQuery(
-        array    $rows,
-        string   $idCol     = 'id',
-        string   $textCol   = 'name',
-        string   $parentCol = 'parent_id',
+        array     $rows,
+        string    $idCol     = 'id',
+        string    $textCol   = 'text',
+        string    $parentCol = 'parent',
         ?callable $transform = null,
     ): static {
         $instance = new static();
         foreach ($rows as $row) {
-            // Support stdClass (Adliss retourne des objets)
+            // Adliss retourne des stdClass depuis prepare()
             if (is_object($row)) {
                 $row = (array) $row;
             }
+            $parentVal = $row[$parentCol] ?? null;
             $node = [
                 'id'     => (string) $row[$idCol],
                 'text'   => (string) $row[$textCol],
-                'parent' => ($row[$parentCol] ?? null) !== null ? (string) $row[$parentCol] : '#',
+                'parent' => ($parentVal !== null && $parentVal !== '' && $parentVal !== '0' && $parentVal !== 0)
+                    ? (string) $parentVal
+                    : '#',
                 'data'   => $row,
             ];
             if ($transform !== null) {
