@@ -1,0 +1,301 @@
+// ─── JsTree — default theme (SCSS rewrite, no external deps) ─────────────────
+
+$jst-indent:       24px   !default;
+$jst-node-height:  24px   !default;
+$jst-icon-size:    22px   !default;
+$jst-font-size:    13px   !default;
+$jst-font-family:  inherit !default;
+
+$jst-text:         #333   !default;
+$jst-selected-bg:  #aad4f5 !default;
+$jst-selected-text:#1a1a1a !default;
+$jst-hover-bg:     #e7f4fb !default;
+$jst-disabled:     #aaa   !default;
+$jst-stripe-even:  #f5f5f5 !default;
+$jst-dot-color:    #ccc   !default;
+
+// ─── Reset ───────────────────────────────────────────────────────────────────
+
+.jstree-node,
+.jstree-children,
+.jstree-container-ul {
+  display: block;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+// ─── Container ───────────────────────────────────────────────────────────────
+
+.jstree {
+  font-family: $jst-font-family;
+  font-size:   $jst-font-size;
+  color:       $jst-text;
+  cursor:      default;
+  overflow:    hidden;
+
+  &.jstree-default {
+    .jstree-container-ul { padding: 4px 0; }
+  }
+
+  &.jstree-striped {
+    .jstree-node:nth-child(even) > .jstree-anchor {
+      background-color: $jst-stripe-even;
+    }
+  }
+}
+
+// ─── Node ────────────────────────────────────────────────────────────────────
+
+.jstree-node {
+  white-space: nowrap;
+  min-height:  $jst-node-height;
+}
+
+// ─── Anchor ──────────────────────────────────────────────────────────────────
+
+.jstree-anchor {
+  display:        inline-flex;
+  align-items:    center;
+  gap:            3px;
+  color:          $jst-text;
+  padding:        1px 4px 1px 1px;
+  margin:         0;
+  white-space:    nowrap;
+  text-decoration: none;
+  vertical-align: top;
+  cursor:         pointer;
+  line-height:    $jst-node-height;
+  min-height:     $jst-node-height;
+
+  &:focus { outline: none; }
+  &:hover { background-color: $jst-hover-bg; }
+
+  &.jstree-clicked,
+  &.jstree-clicked:hover {
+    background-color: $jst-selected-bg;
+    color:            $jst-selected-text;
+  }
+
+  &.jstree-disabled {
+    color:  $jst-disabled;
+    cursor: default;
+    &:hover { background-color: transparent; }
+  }
+}
+
+// ─── Icons ───────────────────────────────────────────────────────────────────
+
+.jstree-icon {
+  display:     inline-block;
+  text-decoration: none;
+  margin:      0;
+  padding:     0;
+  vertical-align: top;
+  text-align:  center;
+  width:       $jst-icon-size;
+  height:      $jst-icon-size;
+  line-height: $jst-icon-size;
+  flex-shrink: 0;
+}
+
+.jstree-no-icons .jstree-themeicon,
+.jstree-themeicon-hidden { display: none; }
+
+.jstree-hidden,
+.jstree-node.jstree-hidden { display: none; }
+
+// ─── Open/close toggle ───────────────────────────────────────────────────────
+
+.jstree-ocl {
+  cursor: pointer;
+
+  &::before {
+    content: '▶';
+    font-size: 9px;
+    color: #888;
+    display: inline-block;
+    transition: transform 0.15s ease;
+    line-height: $jst-icon-size;
+  }
+}
+
+.jstree-leaf > .jstree-ocl {
+  cursor: default;
+  &::before { content: ''; }
+}
+
+.jstree-open > .jstree-ocl::before {
+  transform: rotate(90deg);
+}
+
+// ─── Children ────────────────────────────────────────────────────────────────
+
+.jstree-children {
+  padding-left: $jst-indent;
+
+  .jstree-container-ul > & { padding-left: 0; }
+}
+
+.jstree-open  > .jstree-children { display: block; }
+.jstree-closed > .jstree-children,
+.jstree-leaf  > .jstree-children { display: none; }
+
+// ─── No-dots mode (default) vs dots ──────────────────────────────────────────
+
+.jstree-default:not(.jstree-no-dots) {
+  .jstree-node {
+    position: relative;
+
+    &::before {
+      content:    '';
+      position:   absolute;
+      left:       -($jst-indent - 11px);
+      top:        0;
+      bottom:     0;
+      border-left: 1px dotted $jst-dot-color;
+    }
+
+    &.jstree-last::before { height: calc($jst-node-height / 2); }
+
+    > .jstree-ocl::after {
+      content:      '';
+      display:      inline-block;
+      width:        ($jst-indent - 11px);
+      border-top:   1px dotted $jst-dot-color;
+      vertical-align: middle;
+      margin-right: 2px;
+    }
+  }
+}
+
+// ─── Wholerow ────────────────────────────────────────────────────────────────
+
+.jstree-wholerow-ul {
+  position:    relative;
+  display:     inline-block;
+  min-width:   100%;
+
+  .jstree-leaf > .jstree-ocl { cursor: pointer; }
+
+  .jstree-anchor,
+  .jstree-icon { position: relative; }
+
+  .jstree-wholerow {
+    width:     100%;
+    cursor:    pointer;
+    position:  absolute;
+    left:      0;
+    user-select: none;
+    height:    $jst-node-height;
+  }
+
+  .jstree-clicked ~ .jstree-wholerow,
+  .jstree-wholerow-clicked {
+    background-color: $jst-selected-bg;
+  }
+
+  .jstree-hovered ~ .jstree-wholerow,
+  .jstree-wholerow-hovered {
+    background-color: $jst-hover-bg;
+  }
+}
+
+// ─── Inline rename input ─────────────────────────────────────────────────────
+
+.jstree-rename-input {
+  font:        inherit;
+  font-size:   $jst-font-size;
+  padding:     1px 3px;
+  border:      1px solid #aad4f5;
+  border-radius: 2px;
+  outline:     none;
+  background:  #fff;
+  color:       $jst-text;
+  min-width:   80px;
+}
+
+// ─── Context menu ────────────────────────────────────────────────────────────
+
+.jstree-contextmenu {
+  position:     fixed;
+  z-index:      10000;
+  background:   #fff;
+  border:       1px solid #ccc;
+  border-radius: 3px;
+  box-shadow:   0 2px 8px rgba(0, 0, 0, .18);
+  padding:      4px 0;
+  min-width:    140px;
+  font-size:    $jst-font-size;
+  white-space:  nowrap;
+
+  ul {
+    list-style: none;
+    margin:     0;
+    padding:    0;
+  }
+
+  li {
+    > a {
+      display:      block;
+      padding:      5px 14px;
+      cursor:       pointer;
+      color:        $jst-text;
+      text-decoration: none;
+
+      &:hover { background-color: $jst-hover-bg; }
+    }
+
+    &.jstree-contextmenu-disabled > a {
+      color:  $jst-disabled;
+      cursor: default;
+      &:hover { background-color: transparent; }
+    }
+
+    &.jstree-contextmenu-separator {
+      height: 1px;
+      background: #e0e0e0;
+      margin: 4px 0;
+    }
+  }
+}
+
+// ─── Search highlights ───────────────────────────────────────────────────────
+
+.jstree-search {
+  font-weight: bold;
+  color: #1268b3;
+}
+
+// ─── DnD feedback ────────────────────────────────────────────────────────────
+
+.jstree-dnd-helper {
+  position:   fixed;
+  z-index:    10001;
+  pointer-events: none;
+  padding:    4px 8px;
+  background: $jst-selected-bg;
+  border:     1px solid #aad4f5;
+  border-radius: 3px;
+  font-size:  $jst-font-size;
+  white-space: nowrap;
+  opacity:    0.9;
+  display:    flex;
+  align-items: center;
+  gap:        6px;
+}
+
+.jstree-drop-marker {
+  position:   absolute;
+  left:       0;
+  right:      0;
+  height:     2px;
+  background: #1268b3;
+  z-index:    10000;
+  pointer-events: none;
+}
+
+.jstree-dnd-target {
+  outline: 2px dashed #1268b3;
+  outline-offset: -1px;
+}
