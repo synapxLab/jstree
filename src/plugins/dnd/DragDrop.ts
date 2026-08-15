@@ -27,6 +27,12 @@ interface DragState {
 let _state: DragState | null = null;
 let _marker: HTMLElement | null = null;
 
+// A drag only starts once the pointer has moved past this many pixels — a plain
+// click on a node must not spawn a drag helper.
+const DRAG_THRESHOLD = 5;
+interface PendingDrag { plugin: DndPlugin; node: JsTreeNode; x: number; y: number; }
+let _pending: PendingDrag | null = null;
+
 function _cleanupHelper(): void {
   _state?.helper?.remove();
   _marker?.remove();
@@ -91,7 +97,7 @@ class DndPlugin extends PluginBase {
     if (e.button !== 0) return;
     const node = this._getNodeFromEvent(e);
     if (!node) return;
-    this._startDrag(e, node, e.clientX, e.clientY);
+    _pending = { plugin: this, node, x: e.clientX, y: e.clientY };
   };
 
   private _onTouchStart = (e: TouchEvent): void => {
@@ -99,8 +105,20 @@ class DndPlugin extends PluginBase {
     if (!touch) return;
     const node = this._getNodeFromEvent(e);
     if (!node) return;
-    this._startDrag(e, node, touch.clientX, touch.clientY);
+    _pending = { plugin: this, node, x: touch.clientX, y: touch.clientY };
   };
+
+  /** Promote a pending press to a real drag once the pointer crosses the threshold. */
+  private _maybeStartPending(x: number, y: number, e: MouseEvent | TouchEvent): void {
+    if (!_pending || _pending.plugin !== this) return;
+    const dx = x - _pending.x;
+    const dy = y - _pending.y;
+    if (dx * dx + dy * dy < DRAG_THRESHOLD * DRAG_THRESHOLD) return;
+    const node = _pending.node;
+    _pending = null;
+    this._startDrag(e, node, x, y);
+    this._moveDrag(x, y, e);
+  }
 
   private _startDrag(e: MouseEvent | TouchEvent, node: JsTreeNode, x: number, y: number): void {
     const opts = this._opts;
@@ -166,14 +184,15 @@ class DndPlugin extends PluginBase {
   // ─── Mouse/Touch move ─────────────────────────────────────────────────────
 
   private _onMouseMove = (e: MouseEvent): void => {
-    if (!_state?.dragging) return;
-    this._moveDrag(e.clientX, e.clientY, e);
+    if (_state?.dragging) { this._moveDrag(e.clientX, e.clientY, e); return; }
+    this._maybeStartPending(e.clientX, e.clientY, e);
   };
 
   private _onTouchMove = (e: TouchEvent): void => {
-    if (!_state?.dragging) return;
     const t = e.touches[0];
-    if (t) this._moveDrag(t.clientX, t.clientY, e);
+    if (!t) return;
+    if (_state?.dragging) { this._moveDrag(t.clientX, t.clientY, e); return; }
+    this._maybeStartPending(t.clientX, t.clientY, e);
   };
 
   private _moveDrag(x: number, y: number, e: MouseEvent | TouchEvent): void {
@@ -241,11 +260,13 @@ class DndPlugin extends PluginBase {
   // ─── Mouse/Touch end ──────────────────────────────────────────────────────
 
   private _onMouseUp = (e: MouseEvent): void => {
+    _pending = null;
     if (!_state?.dragging) return;
     this._endDrag(e);
   };
 
   private _onTouchEnd = (e: TouchEvent): void => {
+    _pending = null;
     if (!_state?.dragging) return;
     this._endDrag(e);
   };
@@ -278,9 +299,12 @@ class DndPlugin extends PluginBase {
         } else {
           const targetNode = this.tree.get_node(targetId);
           if (targetNode) {
-            const parentId = targetNode.parent;
-            const pos = targetPos === 'before' ? 'first' : 'last';
-            this.tree.move_node(node.id, parentId, pos);
+            const parentId   = targetNode.parent;
+            const parentNode = this.tree.get_node(parentId);
+            let idx = parentNode ? parentNode.children.indexOf(targetId) : 0;
+            if (idx < 0) idx = 0;
+            if (targetPos === 'after') idx += 1;
+            this.tree.move_node(node.id, parentId, idx);
           }
         }
       }

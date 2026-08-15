@@ -1,6 +1,6 @@
 import type {
   JsTreeOptions, JsTreeNode, JsTreeNodeData,
-  JsTreeCoreOptions, MoveNodeEventDetail,
+  MoveNodeEventDetail,
 } from './JsTree.types';
 import './JsTree.scss';
 
@@ -31,7 +31,6 @@ export class JsTree {
   _model: {
     data: Record<string, JsTreeNode>;
     changed: string[];
-    force_full_redraw: boolean;
   };
 
   // plugin data slots
@@ -70,7 +69,6 @@ export class JsTree {
     this._model = {
       data: {},
       changed: [],
-      force_full_redraw: false,
     };
     this._model.data[ROOT] = this._makeRootNode();
 
@@ -86,6 +84,7 @@ export class JsTree {
     this._applyTheme();
     this._bindCoreEvents();
     this._activatePlugins();
+    JsTree._register(this);
     this.trigger('init');
     this._loadNode(ROOT);
   }
@@ -126,7 +125,7 @@ export class JsTree {
     };
   }
 
-  private _makeNode(d: JsTreeNodeData, parent: string, depth: number): JsTreeNode {
+  private _makeNode(d: JsTreeNodeData, parent: string): JsTreeNode {
     const id = d.id ?? uid();
     return {
       id,
@@ -214,12 +213,12 @@ export class JsTree {
   private _flatten(items: JsTreeNodeData[], defaultParent: string): JsTreeNode[] {
     const result: JsTreeNode[] = [];
 
-    const process = (list: JsTreeNodeData[], parent: string, depth: number) => {
+    const process = (list: JsTreeNodeData[], parent: string) => {
       for (const d of list) {
-        const node = this._makeNode(d, parent, depth);
+        const node = this._makeNode(d, parent);
         result.push(node);
         if (Array.isArray(d.children) && d.children.length > 0) {
-          process(d.children as JsTreeNodeData[], node.id, depth + 1);
+          process(d.children as JsTreeNodeData[], node.id);
         }
       }
     };
@@ -229,10 +228,10 @@ export class JsTree {
     if (hasExplicitParent) {
       for (const d of items) {
         const parent = (d.parent !== undefined && d.parent !== '') ? d.parent : defaultParent;
-        result.push(this._makeNode(d, parent, 0));
+        result.push(this._makeNode(d, parent));
       }
     } else {
-      process(items, defaultParent, 0);
+      process(items, defaultParent);
     }
 
     return result;
@@ -254,7 +253,11 @@ export class JsTree {
         parent.children.push(id);
       }
     }
-    // Build children_d (all descendants)
+    this._rebuildChildrenD();
+  }
+
+  /** Recompute children_d (all descendants) from the current, ordered children arrays. */
+  private _rebuildChildrenD(): void {
     const buildDesc = (id: string): string[] => {
       const node = this._model.data[id];
       if (!node) return [];
@@ -266,6 +269,14 @@ export class JsTree {
       return desc;
     };
     buildDesc(ROOT);
+  }
+
+  /** Refresh the `parents` chain for a node and its whole subtree (top-down). */
+  private _refreshParents(id: string): void {
+    const node = this._model.data[id];
+    if (!node) return;
+    node.parents = this._buildParents(node.parent);
+    for (const cid of node.children) this._refreshParents(cid);
   }
 
   // ─── Rendering ──────────────────────────────────────────────────────────────
@@ -648,7 +659,7 @@ export class JsTree {
       parent: parentNode.id,
     };
 
-    const node = this._makeNode(data, parentNode.id, 0);
+    const node = this._makeNode(data, parentNode.id);
     node.parents = this._buildParents(parentNode.id);
     this._model.data[node.id] = node;
     this._rebuildChildren();
@@ -730,16 +741,32 @@ export class JsTree {
     const node = typeof obj === 'string' ? this._model.data[obj] : this.get_node(obj);
     const np   = typeof newParent === 'string' ? this._model.data[newParent] : this.get_node(newParent);
     if (!node || !np) return false;
-    if (node.id === ROOT || np.children_d.includes(node.id)) return false;
+    if (node.id === ROOT || node.id === np.id || np.children_d.includes(node.id)) return false;
 
     const oldParent   = node.parent;
     const oldPosition = this._model.data[oldParent]?.children.indexOf(node.id) ?? -1;
 
-    node.parent  = np.id;
-    node.parents = this._buildParents(np.id);
+    // Reparent, then rebuild children/children_d from parent refs…
+    node.parent = np.id;
     this._rebuildChildren();
 
-    const newPosition = np.children.indexOf(node.id);
+    // …then place the node at the requested position among its new siblings.
+    const cur = np.children.indexOf(node.id);
+    if (cur !== -1) np.children.splice(cur, 1);
+
+    let idx: number;
+    if (position === 'first')     idx = 0;
+    else if (position === 'last') idx = np.children.length;
+    else {
+      idx = position;
+      if (cur !== -1 && cur < idx) idx -= 1; // compensate for removing the node itself
+      idx = Math.max(0, Math.min(idx, np.children.length));
+    }
+    np.children.splice(idx, 0, node.id);
+
+    // Reordering invalidates descendant lists and the moved subtree's parents chain.
+    this._rebuildChildrenD();
+    this._refreshParents(node.id);
 
     this._redrawNode(oldParent);
     this._redrawNode(np.id);
@@ -747,7 +774,7 @@ export class JsTree {
     const detail: MoveNodeEventDetail = {
       node,
       parent:       np.id,
-      position:     newPosition,
+      position:     idx,
       old_parent:   oldParent,
       old_position: oldPosition,
       is_multi:     false,
@@ -894,20 +921,6 @@ export class JsTree {
   // Allow access to private fields from plugin hooks via unknown cast
   [key: string]: unknown;
 }
-
-// Auto-register on construction — wrap constructor
-const _origInit = JsTree.prototype['_loadNode'];
-// Register instances via a simple approach
-(function () {
-  const proto = JsTree.prototype as Record<string, unknown>;
-  const origTrigger = proto['trigger'] as (name: string, detail?: unknown) => void;
-  proto['trigger'] = function (this: JsTree, name: string, detail?: unknown) {
-    if (name === 'init') {
-      (JsTree as unknown as { _instances: Map<string, JsTree> })._instances.set(this.id, this);
-    }
-    return origTrigger.call(this, name, detail);
-  };
-})();
 
 // ─── Plugin base ─────────────────────────────────────────────────────────────
 

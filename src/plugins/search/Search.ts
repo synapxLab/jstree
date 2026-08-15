@@ -69,7 +69,6 @@ class SearchPlugin extends PluginBase {
   private _applyMarks(): void {
     const opts = this.opts as SearchOptions;
     const showOnly = opts.show_only_matches ?? false;
-    const showOnlyChildren = opts.show_only_matches_children ?? false;
 
     // Collect all ancestors to keep visible
     const visible = new Set<string>(this._matches);
@@ -81,7 +80,7 @@ class SearchPlugin extends PluginBase {
       }
     }
 
-    for (const [id, node] of Object.entries(this.tree['_model'].data as Record<string, JsTreeNode>)) {
+    for (const id of Object.keys(this.tree['_model'].data as Record<string, JsTreeNode>)) {
       if (id === '#') continue;
       const li = this.tree.element.querySelector<HTMLElement>(`#${CSS.escape(id)}`);
       if (!li) continue;

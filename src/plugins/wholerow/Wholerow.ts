@@ -1,4 +1,4 @@
-import { PluginBase, registerPlugin, JsTree } from '../../core/JsTree';
+import { PluginBase, registerPlugin } from '../../core/JsTree';
 
 class WholerowPlugin extends PluginBase {
   init(): void {

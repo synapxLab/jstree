@@ -84,7 +84,7 @@ class ContextMenuPlugin extends PluginBase {
 
     for (const [, item] of Object.entries(items)) {
       if (item.separator_before) ul.appendChild(this._makeSeparator());
-      ul.appendChild(this._makeItem(item, node, reference, menu, x, y));
+      ul.appendChild(this._makeItem(item, reference, menu, x, y));
       if (item.separator_after) ul.appendChild(this._makeSeparator());
     }
 
@@ -119,7 +119,6 @@ class ContextMenuPlugin extends PluginBase {
 
   private _makeItem(
     item: ContextMenuItem,
-    node: JsTreeNode,
     reference: HTMLElement,
     menu: HTMLElement,
     x: number,
@@ -178,7 +177,7 @@ class ContextMenuPlugin extends PluginBase {
       create: {
         label: 'Create',
         separator_after: true,
-        action: (data) => {
+        action: () => {
           const inst = this.tree;
           const newId = inst.create_node(node.id, {}, 'last');
           if (newId) {
