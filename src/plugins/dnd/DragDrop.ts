@@ -33,7 +33,17 @@ const DRAG_THRESHOLD = 5;
 interface PendingDrag { plugin: DndPlugin; node: JsTreeNode; x: number; y: number; }
 let _pending: PendingDrag | null = null;
 
+/**
+ * Classe posée sur <body> le temps d'un drag. Elle coupe la sélection de texte,
+ * qui sinon surligne toutes les lignes survolées et transforme le glissé en
+ * sélection : le pointeur traîne un helper pendant que le navigateur, lui,
+ * croit qu'on surligne un paragraphe. Posée au drag et retirée après, pour que
+ * les libellés restent copiables le reste du temps.
+ */
+const DRAG_BODY_CLASS = 'jstree-dragging';
+
 function _cleanupHelper(): void {
+  document.body.classList.remove(DRAG_BODY_CLASS);
   _state?.helper?.remove();
   _marker?.remove();
   if (_state) {
@@ -132,6 +142,11 @@ class DndPlugin extends PluginBase {
     const nodes = opts.drag_selection && node.state.selected
       ? (this.tree.get_selected(true) as JsTreeNode[])
       : [node];
+
+    // Le press qui précède a pu amorcer une sélection de texte : on la purge
+    // avant de poser la garde, sinon le surlignage déjà commencé survit au drag.
+    document.body.classList.add(DRAG_BODY_CLASS);
+    window.getSelection()?.removeAllRanges();
 
     const helper = this._createHelper(nodes);
     helper.style.left = `${x + 10}px`;

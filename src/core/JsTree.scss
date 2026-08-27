@@ -299,3 +299,14 @@ $jst-dot-color:    #ccc   !default;
   outline: 2px dashed #1268b3;
   outline-offset: -1px;
 }
+
+// ─── Garde de drag ───────────────────────────────────────────────────────────
+//
+// Posée sur <body> par le plugin dnd, uniquement le temps du glissé (cf.
+// DRAG_BODY_CLASS dans DragDrop.ts). Hors drag, les libellés de l'arbre
+// restent sélectionnables et copiables.
+body.jstree-dragging {
+  user-select: none;
+  -webkit-user-select: none;
+  cursor: grabbing;
+}
