@@ -285,6 +285,42 @@ $jst-dot-color:    #ccc   !default;
   gap:        6px;
 }
 
+// Picto d'intention, posé par le plugin dnd via data-drop. Il répond à la seule
+// question qui compte pendant le geste : « si je lâche ici, il se passe quoi ? »
+.jstree-dnd-helper::after {
+  display:       inline-flex;
+  align-items:   center;
+  justify-content: center;
+  width:         18px;
+  height:        18px;
+  border-radius: 50%;
+  font-size:     12px;
+  font-weight:   700;
+  line-height:   1;
+  color:         #fff;
+  content:       '×';
+  background:    #b0b0b0;
+}
+
+// Entrer DANS le nœud survolé : le déplacement change de parent.
+.jstree-dnd-helper[data-drop='inside']::after {
+  content:    '+';
+  background: #2e9e4f;
+}
+
+// Se glisser ENTRE deux frères : seul l'ordre change, pas le parent.
+.jstree-dnd-helper[data-drop='before']::after,
+.jstree-dnd-helper[data-drop='after']::after {
+  content:    '↕';
+  background: #2f6fb0;
+}
+
+// Aucune cible sous le curseur : relâcher ici ne fera rien.
+.jstree-dnd-helper[data-drop='aucune']::after {
+  content:    '×';
+  background: #c0392b;
+}
+
 .jstree-drop-marker {
   position:   absolute;
   left:       0;

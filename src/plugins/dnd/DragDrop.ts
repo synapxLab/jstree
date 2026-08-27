@@ -42,7 +42,83 @@ let _pending: PendingDrag | null = null;
  */
 const DRAG_BODY_CLASS = 'jstree-dragging';
 
+/** Bande, en pixels, où le pointeur déclenche le défilement pendant un drag. */
+const AUTOSCROLL_MARGE = 60;
+/** Vitesse maximale du défilement, en pixels par image. */
+const AUTOSCROLL_VITESSE = 18;
+
+let _autoscroll: number | null = null;
+
+/**
+ * Fait défiler tant que le pointeur reste au bord pendant un glissé.
+ *
+ * Sans cela, une cible située hors de l'écran est INATTEIGNABLE : le pointeur
+ * sort de la zone visible, `elementFromPoint` ne renvoie plus rien, la cible est
+ * perdue et le dépôt s'annule. Un arbre de 70 nœuds dépliés mesure deux fois la
+ * hauteur d'écran — déplacer le haut vers le bas y était donc impossible.
+ *
+ * Le défilement porte sur le premier ancêtre réellement scrollable, et à défaut
+ * sur la fenêtre : selon les écrans, l'arbre vit dans un panneau à ascenseur ou
+ * s'étale dans la page.
+ */
+function _arreterAutoscroll(): void {
+  if (_autoscroll !== null) { cancelAnimationFrame(_autoscroll); _autoscroll = null; }
+}
+
+function _conteneurScrollable(el: HTMLElement | null): HTMLElement | null {
+  let e: HTMLElement | null = el;
+  while (e && e !== document.body) {
+    const cs = getComputedStyle(e);
+    if (/auto|scroll/.test(cs.overflowY) && e.scrollHeight > e.clientHeight) return e;
+    e = e.parentElement;
+  }
+  return null;
+}
+
+function _majAutoscroll(y: number, hote: HTMLElement | null): void {
+  const boite = _conteneurScrollable(hote);
+  const haut  = boite ? boite.getBoundingClientRect().top : 0;
+  const bas   = boite ? boite.getBoundingClientRect().bottom : window.innerHeight;
+
+  let pas = 0;
+  if (y < haut + AUTOSCROLL_MARGE)     pas = -Math.ceil(((haut + AUTOSCROLL_MARGE - y) / AUTOSCROLL_MARGE) * AUTOSCROLL_VITESSE);
+  else if (y > bas - AUTOSCROLL_MARGE) pas =  Math.ceil(((y - (bas - AUTOSCROLL_MARGE)) / AUTOSCROLL_MARGE) * AUTOSCROLL_VITESSE);
+
+  if (pas === 0) { _arreterAutoscroll(); return; }
+  if (_autoscroll !== null) return;   // une boucle tourne déjà
+
+  const boucle = (): void => {
+    if (!_state?.dragging) { _arreterAutoscroll(); return; }
+    if (boite) boite.scrollTop += pas;
+    else       window.scrollBy(0, pas);
+    _autoscroll = requestAnimationFrame(boucle);
+  };
+  _autoscroll = requestAnimationFrame(boucle);
+}
+
+/**
+ * Trace du glissé, muette par défaut. S'allume dans la console du navigateur :
+ *
+ *     window.JSTREE_DEBUG = true          // pour la session
+ *     localStorage.JSTREE_DEBUG = '1'     // et au rechargement
+ *
+ * Le drag est un geste : quand il échoue, il ne reste rien à inspecter après
+ * coup. Cette trace dit à quelle étape la chaîne s'est rompue — nœud empoigné,
+ * seuil franchi, cible survolée, dépôt — sans avoir à rejouer le geste à
+ * l'aveugle.
+ */
+function _log(etape: string, detail?: unknown): void {
+  const w = window as unknown as { JSTREE_DEBUG?: boolean };
+  const actif = w.JSTREE_DEBUG || (() => {
+    try { return localStorage.getItem('JSTREE_DEBUG') === '1'; } catch { return false; }
+  })();
+  if (!actif) return;
+  // eslint-disable-next-line no-console
+  console.log(`[jstree/dnd] ${etape}`, detail ?? '');
+}
+
 function _cleanupHelper(): void {
+  _arreterAutoscroll();
   document.body.classList.remove(DRAG_BODY_CLASS);
   _state?.helper?.remove();
   _marker?.remove();
@@ -106,8 +182,9 @@ class DndPlugin extends PluginBase {
   private _onMouseDown = (e: MouseEvent): void => {
     if (e.button !== 0) return;
     const node = this._getNodeFromEvent(e);
-    if (!node) return;
+    if (!node) { _log('mousedown ignoré (aucun nœud sous le pointeur)'); return; }
     _pending = { plugin: this, node, x: e.clientX, y: e.clientY };
+    _log('mousedown', { id: node.id, texte: node.text, selectionne: node.state.selected });
   };
 
   private _onTouchStart = (e: TouchEvent): void => {
@@ -137,7 +214,7 @@ class DndPlugin extends PluginBase {
       ? opts.is_draggable([node], e as DragEvent)
       : (opts.is_draggable ?? true);
 
-    if (!isDraggable) return;
+    if (!isDraggable) { _log('drag REFUSÉ par is_draggable', { id: node.id }); return; }
 
     const nodes = opts.drag_selection && node.state.selected
       ? (this.tree.get_selected(true) as JsTreeNode[])
@@ -149,6 +226,7 @@ class DndPlugin extends PluginBase {
     window.getSelection()?.removeAllRanges();
 
     const helper = this._createHelper(nodes);
+    helper.dataset['drop'] = 'aucune';   // tant qu'aucune cible n'est survolée
     helper.style.left = `${x + 10}px`;
     helper.style.top  = `${y + 10}px`;
     document.body.appendChild(helper);
@@ -165,6 +243,7 @@ class DndPlugin extends PluginBase {
       externalData: null,
     };
 
+    _log('drag démarré', { nodes: nodes.map((n) => `${n.id}:${n.text}`), drag_selection: opts.drag_selection });
     this.tree.trigger('dnd_start', { nodes, event: e });
   }
 
@@ -210,10 +289,15 @@ class DndPlugin extends PluginBase {
     this._maybeStartPending(t.clientX, t.clientY, e);
   };
 
+  /** Dernière cible tracée, pour ne pas noyer la console à chaque pixel. */
+  private _derniereCibleTracee: string | null = null;
+
   private _moveDrag(x: number, y: number, e: MouseEvent | TouchEvent): void {
     if (!_state?.helper) return;
     _state.helper.style.left = `${x + 10}px`;
     _state.helper.style.top  = `${y + 10}px`;
+
+    _majAutoscroll(y, this.tree.element as HTMLElement);
 
     const drop = this._findDropTarget(x, y);
     if (_state.target && _state.target !== drop?.el) {
@@ -232,6 +316,23 @@ class DndPlugin extends PluginBase {
       _marker?.remove();
     }
 
+    // Trace au CHANGEMENT de cible seulement : à chaque pixel, la console
+    // deviendrait illisible et masquerait justement le moment où la cible se perd.
+    // Picto d'intention porté par le helper, donc lu SOUS le curseur — là où
+    // l'œil se trouve déjà. Il dit ce que le relâchement va faire : entrer dans
+    // le nœud, se glisser entre deux frères, ou rien du tout. Sans lui, « before »
+    // et « inside » se ressemblent à trois pixels près et le geste se joue au
+    // hasard. Le style vit dans JsTree.scss (.jstree-dnd-helper[data-drop]).
+    if (_state.helper) {
+      _state.helper.dataset['drop'] = _state.targetId ? _state.targetPos : 'aucune';
+    }
+
+    const cle = _state.targetId ? `${_state.targetId}/${_state.targetPos}` : null;
+    if (cle !== this._derniereCibleTracee) {
+      this._derniereCibleTracee = cle;
+      _log(cle ? 'cible' : 'cible PERDUE', cle ? { id: _state.targetId, position: _state.targetPos } : undefined);
+    }
+
     this.tree.trigger('dnd_move', { nodes: _state.nodes, target: _state.targetId, position: _state.targetPos, event: e });
   }
 
@@ -245,7 +346,18 @@ class DndPlugin extends PluginBase {
     const id = li.dataset['id'];
     if (!id) return null;
 
-    const rect   = li.getBoundingClientRect();
+    // Les trois zones se mesurent sur la LIGNE du nœud, pas sur le <li>.
+    //
+    // Un <li> ouvert contient toute sa descendance : sur une branche dépliée il
+    // fait plusieurs centaines de pixels, et son tiers supérieur — la zone
+    // « before » — recouvre à lui seul la ligne du parent. Déposer DANS un nœud
+    // déplié était donc impossible : le geste rendait toujours « before », donc
+    // un simple changement d'ordre entre frères, jamais un changement de parent.
+    //
+    // La ligne, c'est l'ancre (ou le wholerow qui la double). Sur une feuille,
+    // ligne et <li> se confondent : rien ne change.
+    const ligne  = li.querySelector<HTMLElement>(':scope > .jstree-anchor') ?? li;
+    const rect   = ligne.getBoundingClientRect();
     const relY   = y - rect.top;
     const third  = rect.height / 3;
 
@@ -291,8 +403,10 @@ class DndPlugin extends PluginBase {
 
     const { nodes, targetId, targetPos, external, externalData } = _state;
     _cleanupHelper();
+    _log('relâché', { cible: targetId, position: targetPos, nœuds: nodes.map((n) => `${n.id}:${n.text}`), externe: external });
 
     if (!targetId) {
+      _log('ANNULÉ — relâché hors d\'une cible valide');
       this.tree.trigger('dnd_cancel', { nodes, event: e });
       _state = null;
       return;
