@@ -44,10 +44,14 @@ const DRAG_BODY_CLASS = 'jstree-dragging';
 
 /** Bande, en pixels, où le pointeur déclenche le défilement pendant un drag. */
 const AUTOSCROLL_MARGE = 60;
+/** Hauteur, en pixels, des bandes « insérer entre deux frères » en bord de ligne. */
+const BANDE_ENTRE_DEUX = 5;
 /** Vitesse maximale du défilement, en pixels par image. */
 const AUTOSCROLL_VITESSE = 18;
 
 let _autoscroll: number | null = null;
+/** Ligne actuellement marquée comme cible, pour la démarquer au survol suivant. */
+let _derniereLigneCible: HTMLElement | null = null;
 
 /**
  * Fait défiler tant que le pointeur reste au bord pendant un glissé.
@@ -119,6 +123,11 @@ function _log(etape: string, detail?: unknown): void {
 
 function _cleanupHelper(): void {
   _arreterAutoscroll();
+  if (_derniereLigneCible) {
+    _derniereLigneCible.classList.remove('jstree-dnd-target');
+    delete _derniereLigneCible.dataset['drop'];
+    _derniereLigneCible = null;
+  }
   document.body.classList.remove(DRAG_BODY_CLASS);
   _state?.helper?.remove();
   _marker?.remove();
@@ -126,9 +135,9 @@ function _cleanupHelper(): void {
     _state.helper = null;
     _state.dragging = false;
   }
-  if (_state?.target) {
-    _state.target.classList.remove('jstree-dnd-target');
-  }
+  // La marque vit sur la LIGNE (cf. _derniereLigneCible ci-dessus), plus sur le
+  // <li> : ce nettoyage-ci n'a plus d'objet.
+  _marker?.remove();
   _marker = null;
 }
 
@@ -300,16 +309,23 @@ class DndPlugin extends PluginBase {
     _majAutoscroll(y, this.tree.element as HTMLElement);
 
     const drop = this._findDropTarget(x, y);
-    if (_state.target && _state.target !== drop?.el) {
-      _state.target.classList.remove('jstree-dnd-target');
+    // La marque de cible se pose sur la LIGNE, jamais sur le <li> : encadrer le
+    // <li> d'une branche dépliée entourait tout son sous-arbre, ce qui ne
+    // désigne rien. Elle porte aussi la position, pour que « entrer dedans » et
+    // « insérer entre » ne se ressemblent pas.
+    if (_derniereLigneCible && _derniereLigneCible !== drop?.ligne) {
+      _derniereLigneCible.classList.remove('jstree-dnd-target');
+      delete _derniereLigneCible.dataset['drop'];
     }
 
     if (drop) {
       _state.target  = drop.el;
       _state.targetId = drop.id;
       _state.targetPos = drop.pos;
-      drop.el.classList.add('jstree-dnd-target');
-      this._positionMarker(drop.el, drop.pos);
+      drop.ligne.classList.add('jstree-dnd-target');
+      drop.ligne.dataset['drop'] = drop.pos;
+      _derniereLigneCible = drop.ligne;
+      this._positionMarker(drop.ligne, drop.pos);
     } else {
       _state.target  = null;
       _state.targetId = null;
@@ -336,7 +352,7 @@ class DndPlugin extends PluginBase {
     this.tree.trigger('dnd_move', { nodes: _state.nodes, target: _state.targetId, position: _state.targetPos, event: e });
   }
 
-  private _findDropTarget(x: number, y: number): { el: HTMLLIElement; id: string; pos: 'before' | 'inside' | 'after' } | null {
+  private _findDropTarget(x: number, y: number): { el: HTMLLIElement; ligne: HTMLElement; id: string; pos: 'before' | 'inside' | 'after' } | null {
     const elUnder = document.elementFromPoint(x, y);
     if (!elUnder) return null;
 
@@ -359,18 +375,24 @@ class DndPlugin extends PluginBase {
     const ligne  = li.querySelector<HTMLElement>(':scope > .jstree-anchor') ?? li;
     const rect   = ligne.getBoundingClientRect();
     const relY   = y - rect.top;
-    const third  = rect.height / 3;
+
+    // Bandes « entre deux » de hauteur FIXE, au lieu des tiers de l'original.
+    // Sur une ligne de 24 px, trois tiers laissent 8 px pour viser l'intérieur
+    // du nœud : la main tombe presque toujours entre deux frères. Une bande de
+    // 5 px en haut et en bas laisse 14 px au cœur — la cible devient la branche,
+    // et l'insertion entre frères redevient un geste délibéré, en bord de ligne.
+    const bande = Math.min(BANDE_ENTRE_DEUX, rect.height / 3);
 
     let pos: 'before' | 'inside' | 'after';
-    if (relY < third)           pos = 'before';
-    else if (relY > third * 2)  pos = 'after';
-    else                         pos = 'inside';
+    if (relY < bande)                    pos = 'before';
+    else if (relY > rect.height - bande) pos = 'after';
+    else                                  pos = 'inside';
 
-    return { el: li, id, pos };
+    return { el: li, ligne, id, pos };
   }
 
-  private _positionMarker(li: HTMLLIElement, pos: 'before' | 'inside' | 'after'): void {
-    if (pos === 'inside') { _marker?.remove(); return; }
+  private _positionMarker(ligne: HTMLElement, pos: 'before' | 'inside' | 'after'): void {
+    if (pos === 'inside') { _marker?.remove(); _marker = null; return; }
 
     if (!_marker) {
       _marker = document.createElement('div');
@@ -378,7 +400,7 @@ class DndPlugin extends PluginBase {
       document.body.appendChild(_marker);
     }
 
-    const rect = li.getBoundingClientRect();
+    const rect = ligne.getBoundingClientRect();
     _marker.style.top    = `${(pos === 'before' ? rect.top : rect.bottom) + window.scrollY}px`;
     _marker.style.left   = `${rect.left + window.scrollX}px`;
     _marker.style.width  = `${rect.width}px`;

@@ -321,19 +321,46 @@ $jst-dot-color:    #ccc   !default;
   background: #c0392b;
 }
 
+// Trait d'insertion entre deux frères. Épais et terminé par une pastille : à
+// 2 px et sans amorce, on ne le distinguait pas d'une bordure de tableau.
 .jstree-drop-marker {
   position:   absolute;
-  left:       0;
-  right:      0;
-  height:     2px;
-  background: #1268b3;
+  height:     3px;
+  background: #2f6fb0;
   z-index:    10000;
   pointer-events: none;
+  border-radius: 2px;
+
+  &::before {
+    content:    '';
+    position:   absolute;
+    left:       -4px;
+    top:        -3px;
+    width:      9px;
+    height:     9px;
+    border-radius: 50%;
+    background: #2f6fb0;
+  }
 }
 
-.jstree-dnd-target {
-  outline: 2px dashed #1268b3;
-  outline-offset: -1px;
+// Marque de cible, posée sur la LIGNE survolée. Elle distingue les deux gestes,
+// qui n'ont pas les mêmes conséquences : entrer DANS un nœud change de parent,
+// se glisser ENTRE deux frères ne change que l'ordre.
+//
+// L'ancien pointillé disait la même chose dans les deux cas, et encadrait le
+// <li> — donc, sur une branche dépliée, tout son sous-arbre : on croyait viser
+// la branche et on visait le vide entre deux lignes.
+.jstree-dnd-target[data-drop='inside'] {
+  background:    rgba(46, 158, 79, 0.22);
+  box-shadow:    inset 0 0 0 2px #2e9e4f;
+  border-radius: 3px;
+}
+
+// Entre deux frères : la ligne ne s'allume pas — c'est le trait qui parle, et
+// lui seul montre OÙ le nœud va s'insérer.
+.jstree-dnd-target[data-drop='before'],
+.jstree-dnd-target[data-drop='after'] {
+  background: transparent;
 }
 
 // ─── Garde de drag ───────────────────────────────────────────────────────────
