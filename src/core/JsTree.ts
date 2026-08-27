@@ -741,7 +741,17 @@ export class JsTree {
     const node = typeof obj === 'string' ? this._model.data[obj] : this.get_node(obj);
     const np   = typeof newParent === 'string' ? this._model.data[newParent] : this.get_node(newParent);
     if (!node || !np) return false;
-    if (node.id === ROOT || node.id === np.id || np.children_d.includes(node.id)) return false;
+    // Garde anti-cycle : un nœud ne peut pas devenir enfant de lui-même ni d'un
+    // de ses PROPRES descendants.
+    //
+    // Elle testait l'inverse — `np.children_d.includes(node.id)`, soit « le
+    // nouveau parent contient déjà ce nœud » — ce qui refusait de REMONTER un
+    // nœud vers un ancêtre. Or déplacer une sous-famille vers la racine, ou d'un
+    // cran vers le grand-parent, est l'opération la plus courante de l'arbre.
+    // Elle échouait sans un mot : le picto annonçait le dépôt, le drop rendait
+    // false, et rien ne bougeait.
+    if (node.id === ROOT || node.id === np.id) return false;
+    if (node.children_d.includes(np.id)) return false;
 
     const oldParent   = node.parent;
     const oldPosition = this._model.data[oldParent]?.children.indexOf(node.id) ?? -1;

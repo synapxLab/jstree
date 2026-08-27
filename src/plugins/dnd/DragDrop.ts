@@ -423,8 +423,9 @@ class DndPlugin extends PluginBase {
       });
     } else if (nodes.length > 0) {
       for (const node of nodes) {
+        let fait = false;
         if (targetPos === 'inside') {
-          this.tree.move_node(node.id, targetId, this._opts.inside_pos ?? 0);
+          fait = this.tree.move_node(node.id, targetId, this._opts.inside_pos ?? 0);
         } else {
           const targetNode = this.tree.get_node(targetId);
           if (targetNode) {
@@ -433,8 +434,16 @@ class DndPlugin extends PluginBase {
             let idx = parentNode ? parentNode.children.indexOf(targetId) : 0;
             if (idx < 0) idx = 0;
             if (targetPos === 'after') idx += 1;
-            this.tree.move_node(node.id, parentId, idx);
+            fait = this.tree.move_node(node.id, parentId, idx);
           }
+        }
+        // Un refus de move_node ne laissait AUCUNE trace : le picto annonçait le
+        // dépôt, la main lâchait, et l'arbre restait immobile sans explication.
+        // jsTree d'origine enregistrait la raison dans `last_error` ; ici on la
+        // journalise et on la publie, à charge de l'écran d'en avertir l'usager.
+        if (!fait) {
+          _log('dépôt REFUSÉ par move_node', { nœud: node.id, cible: targetId, position: targetPos });
+          this.tree.trigger('dnd_refused', { node, target: targetId, position: targetPos });
         }
       }
     }
