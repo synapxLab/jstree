@@ -5,6 +5,11 @@ class WholerowPlugin extends PluginBase {
     this.tree.element.classList.add('jstree-wholerow-ul');
     this.tree.element.addEventListener('redraw.jstree', () => this._decorateAll());
     this.tree.element.addEventListener('ready.jstree',  () => this._decorateAll());
+    // La bande doit SUIVRE la sélection, pas seulement naître avec le nœud :
+    // sans ces deux écoutes, elle gardait l'état du premier rendu et le nœud
+    // ouvert restait indiscernable des autres.
+    this.tree.element.addEventListener('changed.jstree',      () => this._decorateAll());
+    this.tree.element.addEventListener('deselect_all.jstree', () => this._decorateAll());
 
     // Hover via delegation
     this.tree.element.addEventListener('mouseover', this._onMouseOver);
@@ -41,14 +46,21 @@ class WholerowPlugin extends PluginBase {
   }
 
   private _decorateNode(li: HTMLLIElement): void {
-    if (li.querySelector(':scope > .jstree-wholerow')) return;
-    const wr = document.createElement('i');
-    wr.classList.add('jstree-icon', 'jstree-wholerow');
-    wr.setAttribute('role', 'presentation');
-    li.insertBefore(wr, li.firstChild);
-    if (li.classList.contains('jstree-clicked')) {
-      wr.classList.add('jstree-wholerow-clicked');
+    let wr = li.querySelector<HTMLElement>(':scope > .jstree-wholerow');
+    if (!wr) {
+      wr = document.createElement('i');
+      wr.classList.add('jstree-icon', 'jstree-wholerow');
+      wr.setAttribute('role', 'presentation');
+      li.insertBefore(wr, li.firstChild);
     }
+    // L'état sélectionné vit sur l'ANCRE (.jstree-anchor.jstree-clicked), pas
+    // sur le <li> : le test portait sur le mauvais élément et n'était donc
+    // jamais vrai. Et la synchronisation se fait à CHAQUE passage, y compris
+    // sur une bande déjà présente — sinon elle fige l'état initial.
+    const clique = li
+      .querySelector<HTMLElement>(':scope > .jstree-anchor')
+      ?.classList.contains('jstree-clicked') ?? false;
+    wr.classList.toggle('jstree-wholerow-clicked', clique);
   }
 }
 
