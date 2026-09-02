@@ -153,6 +153,12 @@ class DndPlugin extends PluginBase {
       check_while_dragging: true,
       always_copy:         false,
       inside_pos:          0,
+      // `inside_only` — le dépôt ne connaît qu'une position : DANS le nœud
+      // survolé. À activer quand l'ordre des frères ne se décide pas au geste :
+      // un arbre trié à la lecture (alphabétique, par date…) reclassera de
+      // toute façon, et laisser croire qu'on insère « entre deux » promet un
+      // résultat que l'arbre ne tiendra pas.
+      inside_only:         false,
       drag_selection:      true,
       touch:               true,
       large_drop_target:   false,
@@ -375,6 +381,10 @@ class DndPlugin extends PluginBase {
     const ligne  = li.querySelector<HTMLElement>(':scope > .jstree-anchor') ?? li;
     const rect   = ligne.getBoundingClientRect();
     const relY   = y - rect.top;
+
+    // Sans positions relatives, toute la ligne est une cible « dedans » : les
+    // bandes de bord n'ont plus lieu d'être, et la surface utile double.
+    if (this._opts.inside_only) return { el: li, ligne, id, pos: 'inside' };
 
     // Bandes « entre deux » de hauteur FIXE, au lieu des tiers de l'original.
     // Sur une ligne de 24 px, trois tiers laissent 8 px pour viser l'intérieur

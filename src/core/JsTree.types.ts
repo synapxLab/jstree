@@ -102,6 +102,15 @@ export interface DndOptions {
   check_while_dragging?: boolean;
   always_copy?:        boolean;
   inside_pos?:         number | 'first' | 'last';
+  /**
+   * Le dépôt ne connaît qu'une position : DANS le nœud survolé. Ni marqueur
+   * d'insertion, ni bandes de bord — toute la ligne est une cible.
+   *
+   * À activer quand l'ordre des frères ne se décide pas au geste : un arbre
+   * trié à la lecture reclassera de toute façon, et annoncer une insertion
+   * « entre deux » promet un résultat qu'il ne tiendra pas.
+   */
+  inside_only?:        boolean;
   drag_selection?:     boolean;
   touch?:              boolean | 'selected';
   large_drop_target?:  boolean;
